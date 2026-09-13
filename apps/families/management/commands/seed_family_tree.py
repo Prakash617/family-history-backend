@@ -1,299 +1,248 @@
-import datetime
-
 from django.core.management.base import BaseCommand
 from django.db import transaction
-
 from apps.events.models import Event
 from apps.families.models import Family, FamilyMembership
+from apps.media.models import Media
 from apps.members.models import Person
 from apps.notifications.models import Notification
 from apps.relationships.models import MarriagePartnership, Relationship
 from apps.stories.models import Story
 from apps.users.models import User
 
-
 class Command(BaseCommand):
-    help = "Seed database with 4 generations of a realistic family tree, stories, events, and media."
+    help = "Clear current data and seed the authentic Thapa Parivar Vamshavali (थापा परिवार वंशावली)."
 
     @transaction.atomic
     def handle(self, *args, **options):
-        self.stdout.write("Starting database seeding...")
+        self.stdout.write("Clearing existing family tree data...")
 
-        # 1. Create or get Demo User
-        user, created = User.objects.get_or_create(
+        # 1. Clean existing records
+        Relationship.objects.all().delete()
+        MarriagePartnership.objects.all().delete()
+        Event.objects.all().delete()
+        Story.objects.all().delete()
+        Media.objects.all().delete()
+        Person.objects.all().delete()
+        FamilyMembership.objects.all().delete()
+        Family.objects.all().delete()
+
+        # 2. Ensure Demo User exists
+        user, _ = User.objects.get_or_create(
             email="demo@familytree.local",
             defaults={
-                "first_name": "Demo",
-                "last_name": "Explorer",
+                "first_name": "थापा",
+                "last_name": "परिवार",
                 "is_staff": True,
                 "is_superuser": True,
             },
         )
         user.set_password("Demo1234!")
+        user.first_name = "थापा"
+        user.last_name = "परिवार"
         user.save()
-        self.stdout.write("User demo@familytree.local configured.")
 
-        # 2. Create Family
-        family, _ = Family.objects.get_or_create(
-            name="Thapa & Shrestha Historical Lineage",
-            defaults={
-                "description": "Historical records, memories, and ancestral tree of the Thapa family starting from Kathmandu Valley.",
-                "owner": user,
-                "privacy": Family.Privacy.PUBLIC,
-            },
+        # 3. Create Family: थापा परिवार वंशावली
+        family = Family.objects.create(
+            name="थापा परिवार वंशावली",
+            description="बाघ सिंह थापाबाट सुरु भएको थापा परिवारको पुर्ख्यौली वंशावली, सम्बन्ध र ऐतिहासिक अभिलेख।",
+            owner=user,
+            privacy=Family.Privacy.PUBLIC,
         )
-        FamilyMembership.objects.get_or_create(
+        FamilyMembership.objects.create(
             family=family,
             user=user,
-            defaults={"role": FamilyMembership.Role.OWNER},
+            role=FamilyMembership.Role.OWNER,
         )
-        self.stdout.write(f"Family '{family.name}' ready.")
+        self.stdout.write(f"Family '{family.name}' created.")
 
-        # 3. Create Generation 1: Grandparents
-        ram = Person.objects.create(
-            family=family,
-            first_name="Ram",
-            middle_name="Bahadur",
-            last_name="Thapa",
+        # Helper to create person
+        def make_person(first, last="थापा", gender=Person.Gender.MALE, approx_year="", living=False, bio=""):
+            return Person.objects.create(
+                family=family,
+                first_name=first,
+                last_name=last,
+                gender=gender,
+                birth_year_approx=approx_year,
+                is_living=living,
+                biography=bio,
+            )
+
+        # Helper to link parent-child
+        def link_child(parent, child, subtype="BIOLOGICAL"):
+            Relationship.objects.create(
+                family=family,
+                person_a=parent,
+                person_b=child,
+                relationship_type=Relationship.Type.PARENT_CHILD,
+                relationship_subtype=subtype,
+            )
+
+        # Helper to link spouses
+        def link_spouses(p1, p2):
+            MarriagePartnership.objects.create(
+                family=family,
+                partner_1=p1,
+                partner_2=p2,
+                partnership_type=MarriagePartnership.PartnershipType.MARRIAGE,
+                end_reason=MarriagePartnership.EndReason.ONGOING if (p1.is_living or p2.is_living) else MarriagePartnership.EndReason.DEATH,
+            )
+            Relationship.objects.create(
+                family=family,
+                person_a=p1,
+                person_b=p2,
+                relationship_type=Relationship.Type.SPOUSE,
+            )
+
+        # ==========================================
+        # GENERATION 1 (मूल पुर्खा / Root Ancestor)
+        # ==========================================
+        bagh_singh = make_person(
+            first="बाघ सिंह",
+            last="थापा",
             gender=Person.Gender.MALE,
-            birth_date=datetime.date(1938, 3, 15),
-            death_date=datetime.date(2018, 11, 20),
-            birth_place="Kathmandu, Nepal",
-            death_place="Kathmandu, Nepal",
-            is_living=False,
-            occupation="Civil Engineer & Historian",
-            biography="Pioneered civic planning initiatives in Kathmandu. Avid mountaineer and preserver of traditional oral histories.",
-        )
-        sita = Person.objects.create(
-            family=family,
-            first_name="Sita",
-            middle_name="Devi",
-            last_name="Thapa",
-            gender=Person.Gender.FEMALE,
-            birth_date=datetime.date(1942, 7, 10),
-            death_date=datetime.date(2021, 4, 5),
-            birth_place="Patan, Lalitpur",
-            death_place="Kathmandu, Nepal",
-            is_living=False,
-            occupation="Educator & Writer",
-            biography="Taught literature for four decades and published several compendiums of traditional folklore.",
+            approx_year="पहिलो पुस्ता",
+            living=False,
+            bio="थापा परिवारको मूल पुर्खा।",
         )
 
-        MarriagePartnership.objects.create(
-            family=family,
-            partner_1=ram,
-            partner_2=sita,
-            start_date=datetime.date(1960, 5, 2),
-            start_place="Kathmandu, Nepal",
-            end_reason=MarriagePartnership.EndReason.DEATH,
-        )
-        Relationship.objects.create(
-            family=family,
-            person_a=ram,
-            person_b=sita,
-            relationship_type=Relationship.Type.SPOUSE,
-        )
-
-        # 4. Create Generation 2: Children of Ram & Sita
-        rajesh = Person.objects.create(
-            family=family,
-            first_name="Rajesh",
-            last_name="Thapa",
+        # ==========================================
+        # GENERATION 2
+        # ==========================================
+        hasta_bahadur = make_person(
+            first="हस्त बहादुर",
+            last="थापा",
             gender=Person.Gender.MALE,
-            birth_date=datetime.date(1963, 8, 22),
-            birth_place="Kathmandu, Nepal",
-            is_living=True,
-            occupation="Architect",
-            biography="Specializes in sustainable heritage architecture and preservation across South Asia.",
+            approx_year="दोस्रो पुस्ता",
+            living=False,
+            bio="बाघ सिंह थापाका सुपुत्र।",
         )
-        sunita = Person.objects.create(
-            family=family,
-            first_name="Sunita",
-            last_name="Shrestha",
+        link_child(bagh_singh, hasta_bahadur)
+
+        # ==========================================
+        # GENERATION 3 (Children of Hasta Bahadur)
+        # ==========================================
+        nain_bahadur = make_person(first="नैन बहादुर", last="थापा", gender=Person.Gender.MALE, approx_year="तेस्रो पुस्ता")
+        nani_bahadur = make_person(first="नानी बहादुर", last="थापा", gender=Person.Gender.MALE, approx_year="तेस्रो पुस्ता")
+        dilli_thapa_g3 = make_person(first="डिल्ली", last="थापा", gender=Person.Gender.MALE, approx_year="तेस्रो पुस्ता")
+        kanchha_thapa = make_person(first="कान्छ", last="थापा", gender=Person.Gender.MALE, approx_year="तेस्रो पुस्ता")
+
+        for child in [nain_bahadur, nani_bahadur, dilli_thapa_g3, kanchha_thapa]:
+            link_child(hasta_bahadur, child)
+
+        # Spouse of Nani Bahadur:
+        man_kumari = make_person(
+            first="मानकुमारी",
+            last="थापा",
             gender=Person.Gender.FEMALE,
-            birth_date=datetime.date(1966, 12, 14),
-            birth_place="Bhaktapur, Nepal",
-            is_living=True,
-            occupation="Professor of Botany",
-            biography="Researches alpine flora and ethnobotany in the Himalayas.",
+            approx_year="तेस्रो पुस्ता",
+            living=False,
         )
-        MarriagePartnership.objects.create(
-            family=family,
-            partner_1=rajesh,
-            partner_2=sunita,
-            start_date=datetime.date(1990, 2, 18),
-            start_place="Kathmandu",
-            end_reason=MarriagePartnership.EndReason.ONGOING,
+        link_spouses(nani_bahadur, man_kumari)
+
+        # ==========================================
+        # GENERATION 4 (Children of Nani Bahadur & Man Kumari)
+        # ==========================================
+        shiva_thapa = make_person(first="शिव", last="थापा", gender=Person.Gender.MALE, approx_year="चौथो पुस्ता")
+        som_bahadur = make_person(first="सोम बहादुर", last="थापा", gender=Person.Gender.MALE, approx_year="चौथो पुस्ता")
+        dilli_thapa_g4 = make_person(first="डिल्ली", last="थापा", gender=Person.Gender.MALE, approx_year="चौथो पुस्ता")
+        krishna_thapa = make_person(first="कृष्ण", last="थापा", gender=Person.Gender.MALE, approx_year="चौथो पुस्ता")
+        bishnu_thapa = make_person(first="बिष्णु", last="थापा", gender=Person.Gender.MALE, approx_year="चौथो पुस्ता")
+        shantaram_thapa = make_person(first="शान्ताराम", last="थापा", gender=Person.Gender.MALE, approx_year="चौथो पुस्ता")
+
+        for child in [shiva_thapa, som_bahadur, dilli_thapa_g4, krishna_thapa, bishnu_thapa, shantaram_thapa]:
+            link_child(nani_bahadur, child)
+            link_child(man_kumari, child)
+
+        # Spouse of Som Bahadur:
+        khum_kumari = make_person(
+            first="खुम कुमारी",
+            last="थापा",
+            gender=Person.Gender.FEMALE,
+            approx_year="चौथो पुस्ता",
+            living=False,
         )
-        Relationship.objects.create(family=family, person_a=rajesh, person_b=sunita, relationship_type=Relationship.Type.SPOUSE)
+        link_spouses(som_bahadur, khum_kumari)
 
-        # Parent-child links for Rajesh
-        Relationship.objects.create(family=family, person_a=ram, person_b=rajesh, relationship_type=Relationship.Type.PARENT_CHILD)
-        Relationship.objects.create(family=family, person_a=sita, person_b=rajesh, relationship_type=Relationship.Type.PARENT_CHILD)
-
-        # Second sibling: Bikash Thapa
-        bikash = Person.objects.create(
-            family=family,
-            first_name="Bikash",
-            last_name="Thapa",
+        # ==========================================
+        # GENERATION 5 (Children of Som Bahadur & Khum Kumari)
+        # ==========================================
+        indra_bahadur = make_person(
+            first="इन्द्र बहादुर",
+            last="थापा",
             gender=Person.Gender.MALE,
-            birth_date=datetime.date(1968, 4, 30),
-            birth_place="Kathmandu, Nepal",
-            is_living=True,
-            occupation="Cardiologist",
+            approx_year="पाँचौँ पुस्ता",
+            living=True,
         )
-        maya_g = Person.objects.create(
-            family=family,
-            first_name="Maya",
-            last_name="Gurung",
-            gender=Person.Gender.FEMALE,
-            birth_date=datetime.date(1971, 9, 8),
-            birth_place="Pokhara, Nepal",
-            is_living=True,
-            occupation="Public Health Specialist",
-        )
-        MarriagePartnership.objects.create(family=family, partner_1=bikash, partner_2=maya_g, start_date=datetime.date(1995, 11, 12))
-        Relationship.objects.create(family=family, person_a=bikash, person_b=maya_g, relationship_type=Relationship.Type.SPOUSE)
-        Relationship.objects.create(family=family, person_a=ram, person_b=bikash, relationship_type=Relationship.Type.PARENT_CHILD)
-        Relationship.objects.create(family=family, person_a=sita, person_b=bikash, relationship_type=Relationship.Type.PARENT_CHILD)
-
-        # 5. Create Generation 3: Grandchildren
-        aarav = Person.objects.create(
-            family=family,
-            first_name="Aarav",
-            last_name="Thapa",
+        kshetra_bahadur = make_person(
+            first="क्षत्र बहादुर",
+            last="थापा",
             gender=Person.Gender.MALE,
-            birth_date=datetime.date(1993, 6, 17),
-            birth_place="Kathmandu, Nepal",
-            is_living=True,
-            occupation="Software Engineer",
-            biography="Full-stack developer building open source tools and genealogical engines.",
-        )
-        priya = Person.objects.create(
-            family=family,
-            first_name="Priya",
-            last_name="Thapa",
-            gender=Person.Gender.FEMALE,
-            birth_date=datetime.date(1997, 10, 25),
-            birth_place="Kathmandu, Nepal",
-            is_living=True,
-            occupation="Visual Designer",
-        )
-        rohan = Person.objects.create(
-            family=family,
-            first_name="Rohan",
-            last_name="Thapa",
-            gender=Person.Gender.MALE,
-            birth_date=datetime.date(1999, 1, 14),
-            birth_place="Pokhara, Nepal",
-            is_living=True,
-            occupation="Medical Resident",
+            approx_year="पाँचौँ पुस्ता",
+            living=True,
         )
 
-        # Connect Aarav & Priya to Rajesh & Sunita
-        for child in [aarav, priya]:
-            Relationship.objects.create(family=family, person_a=rajesh, person_b=child, relationship_type=Relationship.Type.PARENT_CHILD)
-            Relationship.objects.create(family=family, person_a=sunita, person_b=child, relationship_type=Relationship.Type.PARENT_CHILD)
+        for child in [indra_bahadur, kshetra_bahadur]:
+            link_child(som_bahadur, child)
+            link_child(khum_kumari, child)
 
-        # Connect Rohan to Bikash & Maya
-        Relationship.objects.create(family=family, person_a=bikash, person_b=rohan, relationship_type=Relationship.Type.PARENT_CHILD)
-        Relationship.objects.create(family=family, person_a=maya_g, person_b=rohan, relationship_type=Relationship.Type.PARENT_CHILD)
+        # Spouses of Generation 5:
+        radhika = make_person(first="राधिका", last="थापा", gender=Person.Gender.FEMALE, approx_year="पाँचौँ पुस्ता", living=True)
+        link_spouses(indra_bahadur, radhika)
 
-        # 6. Create Generation 4: Great-Granddaughter
-        elena = Person.objects.create(
-            family=family,
-            first_name="Elena",
-            last_name="Thapa",
-            gender=Person.Gender.FEMALE,
-            birth_date=datetime.date(2023, 3, 5),
-            birth_place="Kathmandu, Nepal",
-            is_living=True,
-            biography="The newest bright addition to the family!",
-        )
-        Relationship.objects.create(family=family, person_a=aarav, person_b=elena, relationship_type=Relationship.Type.PARENT_CHILD)
+        saraswati = make_person(first="सरस्वती", last="थापा", gender=Person.Gender.FEMALE, approx_year="पाँचौँ पुस्ता", living=True)
+        link_spouses(kshetra_bahadur, saraswati)
 
-        # 7. Create Historical Events & Milestones
-        Event.objects.create(
-            family=family,
-            person=ram,
-            event_type=Event.EventType.BIRTH,
-            title="Birth of Ram Bahadur Thapa",
-            date=datetime.date(1938, 3, 15),
-            place="Kathmandu, Nepal",
-            description="Born in the historic center of old Kathmandu.",
-        )
-        Event.objects.create(
-            family=family,
-            person=ram,
-            event_type=Event.EventType.MARRIAGE,
-            title="Marriage of Ram & Sita",
-            date=datetime.date(1960, 5, 2),
-            place="Kathmandu, Nepal",
-            description="Traditional ceremony celebrated with extended relatives.",
-        )
-        Event.objects.create(
-            family=family,
-            person=rajesh,
-            event_type=Event.EventType.EDUCATION,
-            title="Graduation in Architecture",
-            date=datetime.date(1987, 7, 20),
-            place="Roorkee, India",
-            description="Awarded distinction honors for heritage restoration research.",
-        )
-        Event.objects.create(
-            family=family,
-            person=aarav,
-            event_type=Event.EventType.CAREER,
-            title="Launch of Global Open Source Initiative",
-            date=datetime.date(2021, 9, 1),
-            place="Kathmandu",
-            description="Founded community digital preservation lab.",
-        )
+        # ==========================================
+        # GENERATION 6
+        # ==========================================
+        # Children of Indra Bahadur & Radhika:
+        rajashi = make_person(first="राजषी", last="थापा", gender=Person.Gender.FEMALE, approx_year="छैटौँ पुस्ता", living=True)
+        ujjwal = make_person(first="उज्ज्वल", last="थापा", gender=Person.Gender.MALE, approx_year="छैटौँ पुस्ता", living=True)
+        uday = make_person(first="उदय", last="थापा", gender=Person.Gender.MALE, approx_year="छैटौँ पुस्ता", living=True)
 
-        # 8. Create Stories
-        s1 = Story.objects.create(
+        for child in [rajashi, ujjwal, uday]:
+            link_child(indra_bahadur, child)
+            link_child(radhika, child)
+
+        # Children of Kshetra Bahadur & Saraswati:
+        nil_bahadur = make_person(first="निल बहादुर", last="थापा", gender=Person.Gender.MALE, approx_year="छैटौँ पुस्ता", living=True)
+        nilisa = make_person(first="निलिसा", last="थापा", gender=Person.Gender.FEMALE, approx_year="छैटौँ पुस्ता", living=True)
+
+        for child in [nil_bahadur, nilisa]:
+            link_child(kshetra_bahadur, child)
+            link_child(saraswati, child)
+
+        # ==========================================
+        # STORIES & MEMORIES (इतिहास तथा स्मृतिहरू)
+        # ==========================================
+        Story.objects.create(
             family=family,
             author=user,
-            title="The Grandfather's Journal: Journey Across the Himalayan Passes",
+            title="थापा परिवारको ऐतिहासिक पुर्ख्यौली तथा उद्गम",
             content=(
-                "# The Journey of 1958\n\n"
-                "In the spring of 1958, Grandfather Ram Bahadur undertook a historic surveying trek "
-                "through the high valleys of Langtang and Manang.\n\n"
-                "Equipped with brass instruments, hand-drawn topographic parchment, and two pack mules, "
-                "his party documented forgotten trails and natural water springs that continue to supply local villages today.\n\n"
-                "> *'True heritage is not mere stone and dust; it is the enduring care we carry for the earth and those who come after.'*\n\n"
-                "This collection of notes remains preserved in the family archives."
+                "# थापा परिवार वंशावली इतिहास\n\n"
+                "यो वंशावली आदरणीय मूल पुर्खा **बाघ सिंह थापा**बाट प्रारम्भ भई छैटौँ पुस्तासम्म फैलिएको ऐतिहासिक पारिवारिक अभिलेख हो।\n\n"
+                "दोस्रो पुस्ताका **हस्त बहादुर थापा**का चार सुपुत्रहरू: नैन बहादुर, नानी बहादुर, डिल्ली र कान्छ थापामध्ये "
+                "नानी बहादुर थापा तथा मानकुमारी थापाको शाखाबाट सोम बहादुर थापा हुँदै आजको नयाँ पुस्तासम्म वंशावली विस्तार भएको छ।"
             ),
             status=Story.Status.PUBLISHED,
-            published_at=datetime.datetime(2024, 1, 15, 10, 0, tzinfo=datetime.timezone.utc),
         )
-        s1.associated_people.set([ram, rajesh])
 
-        s2 = Story.objects.create(
-            family=family,
-            author=user,
-            title="Our Traditional Courtyard: Memories of Sita Devi's Garden",
-            content=(
-                "# Morning Light in the Courtyard\n\n"
-                "Grandmother Sita Devi believed that every brick in our ancestral house held a story. "
-                "Her courtyard was famed throughout Patan for fragrant jasmine, night-blooming parijat, "
-                "and shelves of medicinal herbs.\n\n"
-                "Every Dashain festival, all four generations gathered beneath the walnut tree to receive blessings."
-            ),
-            status=Story.Status.PUBLISHED,
-            published_at=datetime.datetime(2024, 2, 20, 14, 30, tzinfo=datetime.timezone.utc),
-        )
-        s2.associated_people.set([sita, priya, aarav])
-
-        # 9. Create Notifications
+        # ==========================================
+        # NOTIFICATION
+        # ==========================================
         Notification.objects.create(
             user=user,
             family=family,
-            notification_type="WELCOME",
-            title="Welcome to Family Historical Tree",
-            message="Your family tree 'Thapa & Shrestha Historical Lineage' has been initialized with 4 generations!",
+            notification_type="VAMSHAVALI_LOADED",
+            title="थापा परिवार वंशावली सफलतापूर्वक प्रविष्ट भयो",
+            message="तपाईंको थापा परिवार वंशावली (६ पुस्ता, २३ सदस्यहरू) सफलतापूर्वक लोड भएको छ।",
             action_url=f"/family/{family.id}/tree",
             is_read=False,
         )
 
-        self.stdout.write(self.style.SUCCESS("Successfully seeded 4 generations, events, stories, and relationships!"))
+        self.stdout.write(
+            self.style.SUCCESS(
+                "सफलतापूर्वक पुरानो डाटा हटाई 'थापा परिवार वंशावली' का ६ पुस्ता (२३ सदस्यहरू) प्रविष्ट गरियो!"
+            )
+        )
