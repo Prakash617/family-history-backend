@@ -241,6 +241,9 @@ class Command(BaseCommand):
             is_read=False,
         )
 
+        from django.core.management import call_command
+        call_command("generate_sample_avatars")
+
         self.stdout.write(
             self.style.SUCCESS(
                 "सफलतापूर्वक पुरानो डाटा हटाई 'थापा परिवार वंशावली' का ६ पुस्ता (२३ सदस्यहरू) प्रविष्ट गरियो!"
