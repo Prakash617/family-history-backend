@@ -50,6 +50,11 @@ class FamilyMembership(models.Model):
         EDITOR = "EDITOR", "Editor"
         VIEWER = "VIEWER", "Viewer"
 
+    class Status(models.TextChoices):
+        APPROVED = "APPROVED", "Approved"
+        PENDING = "PENDING", "Pending Approval"
+        REJECTED = "REJECTED", "Rejected"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     family = models.ForeignKey(
         Family,
@@ -65,6 +70,12 @@ class FamilyMembership(models.Model):
         max_length=20,
         choices=Role.choices,
         default=Role.VIEWER,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.APPROVED,
+        db_index=True,
     )
     # User can optionally be linked to a person node inside the family tree
     linked_person = models.ForeignKey(

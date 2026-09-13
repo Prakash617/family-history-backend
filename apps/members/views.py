@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.families.models import Family
+from apps.families.permissions import IsFamilyEditor
 
 from .models import Person
 from .serializers import (
@@ -52,7 +53,12 @@ class PersonViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ["list", "retrieve", "relatives"]:
             return [permissions.AllowAny()]
-        return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), IsFamilyEditor()]
+
+    def perform_create(self, serializer):
+        family = serializer.validated_data.get("family")
+        self.check_object_permissions(self.request, family)
+        serializer.save()
 
     @action(detail=True, methods=["get"])
     def relatives(self, request, pk=None):

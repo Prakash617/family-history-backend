@@ -18,4 +18,14 @@ urlpatterns = [
         FamilyMembershipViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
         name="family-memberships-detail",
     ),
+    path(
+        "<uuid:family_pk>/memberships/<uuid:pk>/approve/",
+        FamilyMembershipViewSet.as_view({"post": "approve"}),
+        name="family-memberships-approve",
+    ),
+    path(
+        "<uuid:family_pk>/memberships/<uuid:pk>/reject/",
+        FamilyMembershipViewSet.as_view({"post": "reject"}),
+        name="family-memberships-reject",
+    ),
 ]

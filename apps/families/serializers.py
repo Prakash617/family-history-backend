@@ -11,7 +11,7 @@ class FamilyMembershipSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FamilyMembership
-        fields = ("id", "family", "user", "user_id", "role", "linked_person", "joined_at")
+        fields = ("id", "family", "user", "user_id", "role", "status", "linked_person", "joined_at")
         read_only_fields = ("id", "family", "joined_at")
 
 
@@ -57,8 +57,15 @@ class FamilySerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return None
+        if obj.owner_id == request.user.id:
+            return "OWNER"
         membership = obj.memberships.filter(user=request.user).first()
-        return membership.role if membership else None
+        if membership:
+            if membership.status == FamilyMembership.Status.APPROVED:
+                return membership.role
+            elif membership.status == FamilyMembership.Status.PENDING:
+                return "PENDING"
+        return "VIEWER" if obj.privacy == Family.Privacy.PUBLIC else None
 
 
 class FamilyDashboardStatsSerializer(serializers.Serializer):

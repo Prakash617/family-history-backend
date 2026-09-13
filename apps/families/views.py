@@ -93,6 +93,33 @@ class FamilyViewSet(viewsets.ModelViewSet):
         }
         return Response(data)
 
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def request_access(self, request, pk=None):
+        family = self.get_object()
+        user = request.user
+        if family.owner == user:
+            return Response({"detail": "You are already the owner of this family.", "status": "APPROVED", "role": "OWNER"})
+
+        role = request.data.get("role", "EDITOR")
+        if role not in ["EDITOR", "VIEWER"]:
+            role = "EDITOR"
+
+        membership, created = FamilyMembership.objects.get_or_create(
+            family=family,
+            user=user,
+            defaults={"role": role, "status": FamilyMembership.Status.PENDING},
+        )
+        if not created and membership.status == FamilyMembership.Status.REJECTED:
+            membership.status = FamilyMembership.Status.PENDING
+            membership.role = role
+            membership.save()
+
+        return Response({
+            "detail": "Access request submitted. Waiting for family owner approval.",
+            "status": membership.status,
+            "role": membership.role,
+        })
+
 
 class FamilyMembershipViewSet(viewsets.ModelViewSet):
     """
@@ -107,9 +134,10 @@ class FamilyMembershipViewSet(viewsets.ModelViewSet):
             return FamilyMembership.objects.none()
 
         return FamilyMembership.objects.filter(
-            family_id=family_id,
-            family__memberships__user=user,
-        ).select_related("user", "family")
+            family_id=family_id
+        ).filter(
+            Q(family__owner=user) | Q(family__memberships__user=user)
+        ).distinct().select_related("user", "family")
 
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:
@@ -118,4 +146,26 @@ class FamilyMembershipViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         family = Family.objects.get(pk=self.kwargs.get("family_pk"))
-        serializer.save(family=family)
+        user_id = serializer.validated_data.get("user_id")
+        user = serializer.validated_data.get("user")
+        if user_id and not user:
+            from apps.users.models import User
+            user = User.objects.get(pk=user_id)
+        serializer.save(family=family, status=FamilyMembership.Status.APPROVED)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated, IsFamilyAdmin])
+    def approve(self, request, family_pk=None, pk=None):
+        membership = self.get_object()
+        role = request.data.get("role", membership.role)
+        if role in [FamilyMembership.Role.ADMIN, FamilyMembership.Role.EDITOR, FamilyMembership.Role.VIEWER]:
+            membership.role = role
+        membership.status = FamilyMembership.Status.APPROVED
+        membership.save()
+        return Response({"detail": f"Approved {membership.user.email} as {membership.role}.", "role": membership.role, "status": membership.status})
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated, IsFamilyAdmin])
+    def reject(self, request, family_pk=None, pk=None):
+        membership = self.get_object()
+        membership.status = FamilyMembership.Status.REJECTED
+        membership.save()
+        return Response({"detail": f"Declined access request for {membership.user.email}.", "status": membership.status})

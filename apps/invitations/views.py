@@ -21,6 +21,19 @@ class InvitationViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         return [permissions.IsAuthenticated()]
 
+    def perform_create(self, serializer):
+        invite = serializer.save(invited_by=self.request.user)
+        from apps.users.models import User
+        target_user = User.objects.filter(email__iexact=invite.email).first()
+        if target_user:
+            FamilyMembership.objects.update_or_create(
+                family=invite.family,
+                user=target_user,
+                defaults={"role": invite.role, "status": FamilyMembership.Status.APPROVED},
+            )
+            invite.status = Invitation.Status.ACCEPTED
+            invite.save()
+
 
 class AcceptInvitationView(APIView):
     permission_classes = [permissions.IsAuthenticated]

@@ -38,6 +38,8 @@ class HasFamilyRole(permissions.BasePermission):
 
         try:
             membership = FamilyMembership.objects.get(family=family, user=request.user)
+            if membership.status != FamilyMembership.Status.APPROVED:
+                return False
             user_level = self.ROLE_HIERARCHY.get(membership.role, 0)
             required_level = self.ROLE_HIERARCHY.get(self.required_role, 1)
             return user_level >= required_level
