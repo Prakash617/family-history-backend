@@ -47,6 +47,18 @@ class TreeEngine:
         if self.direction in ("descendants", "both"):
             self._traverse_descendants(str(root_person.id), visited_people, generation_map)
 
+        # Include any remaining unvisited members of the family (e.g. newly added members or separate branches)
+        remaining = family_members.exclude(id__in=[p.id for p in visited_people.values()])
+        for rem in remaining:
+            rem_id = str(rem.id)
+            if rem_id not in visited_people:
+                visited_people[rem_id] = rem
+                generation_map[rem_id] = 0
+                if self.direction in ("descendants", "both"):
+                    self._traverse_descendants(rem_id, visited_people, generation_map)
+                if self.direction in ("ancestors", "both"):
+                    self._traverse_ancestors(rem_id, visited_people, generation_map)
+
         # 3. Discover Spouses for all traversed people
         visited_ids = set(visited_people.keys())
         spouse_pairs = self._find_spouses_for_nodes(visited_ids, visited_people, generation_map)
