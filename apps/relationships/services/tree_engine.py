@@ -10,11 +10,12 @@ class TreeEngine:
     optimized for rendering clean, readable genealogical lineages.
     """
 
-    def __init__(self, family, root_person_id: Optional[str] = None, depth: int = 10, direction: str = "both"):
+    def __init__(self, family, root_person_id: Optional[str] = None, depth: int = 10, direction: str = "both", request=None):
         self.family = family
         self.root_person_id = root_person_id
         self.max_depth = min(max(1, depth), 12)
         self.direction = direction
+        self.request = request
 
     def build_tree(self) -> Dict[str, Any]:
         family_members = Person.objects.filter(family=self.family)
@@ -87,7 +88,11 @@ class TreeEngine:
                     "birthPlace": person.birth_place,
                     "isLiving": person.is_living,
                     "occupation": person.occupation,
-                    "photoUrl": person.profile_photo.url if person.profile_photo else None,
+                    "photoUrl": (
+                        self.request.build_absolute_uri(person.profile_photo.url)
+                        if self.request and person.profile_photo
+                        else (person.profile_photo.url if person.profile_photo else None)
+                    ),
                     "generation": gen,
                 },
             })

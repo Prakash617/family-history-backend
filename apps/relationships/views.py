@@ -78,6 +78,7 @@ class FamilyTreeView(APIView):
             root_person_id=root_person_id,
             depth=depth,
             direction=direction,
+            request=request,
         )
         data = engine.build_tree()
         return Response(data, status=status.HTTP_200_OK)

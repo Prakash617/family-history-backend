@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, viewsets
@@ -44,13 +45,13 @@ class FamilyViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
-        family = serializer.save(owner=self.request.user)
-        # Automatically make creator the OWNER in memberships
-        FamilyMembership.objects.create(
-            family=family,
-            user=self.request.user,
-            role=FamilyMembership.Role.OWNER,
-        )
+        with transaction.atomic():
+            family = serializer.save(owner=self.request.user)
+            FamilyMembership.objects.create(
+                family=family,
+                user=self.request.user,
+                role=FamilyMembership.Role.OWNER,
+            )
 
     @extend_schema(responses={200: FamilyDashboardStatsSerializer})
     @action(detail=True, methods=["get"], permission_classes=[permissions.IsAuthenticated, IsFamilyViewerOrPublic])
