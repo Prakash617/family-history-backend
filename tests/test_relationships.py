@@ -46,4 +46,5 @@ def test_tree_engine_nodes_and_edges():
 
     assert graph["meta"]["totalNodes"] == 3
     assert len(graph["nodes"]) == 3
-    assert len(graph["edges"]) == 3  # 1 spouse edge + 2 parent-child edges
+    # 1 spouse edge + 1 deduplicated parent-child lineage edge = 2 edges
+    assert len(graph["edges"]) == 2

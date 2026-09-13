@@ -1,28 +1,25 @@
 from collections import deque
-from typing import Any, Dict, Optional, Set
-
+from typing import Any, Dict, List, Optional, Set
 from django.db.models import Q
-
 from apps.members.models import Person
 from apps.relationships.models import MarriagePartnership, Relationship
-
 
 class TreeEngine:
     """
     Constructs a React Flow compatible graph of nodes and edges
-    optimized for rendering complex family lineages with partnerships and generational depth.
+    optimized for rendering clean, readable genealogical lineages.
     """
 
-    def __init__(self, family, root_person_id: Optional[str] = None, depth: int = 4, direction: str = "both"):
+    def __init__(self, family, root_person_id: Optional[str] = None, depth: int = 10, direction: str = "both"):
         self.family = family
         self.root_person_id = root_person_id
-        self.max_depth = min(max(1, depth), 10)
+        self.max_depth = min(max(1, depth), 12)
         self.direction = direction
 
     def build_tree(self) -> Dict[str, Any]:
         family_members = Person.objects.filter(family=self.family)
         if not family_members.exists():
-            return {"meta": {"total_nodes": 0, "total_edges": 0}, "nodes": [], "edges": []}
+            return {"meta": {"totalNodes": 0, "totalEdges": 0}, "nodes": [], "edges": []}
 
         # 1. Resolve Root Person
         root_person = None
@@ -30,7 +27,6 @@ class TreeEngine:
             root_person = family_members.filter(id=self.root_person_id).first()
 
         if not root_person:
-            # Find earliest ancestor without parents in this family
             child_person_ids = Relationship.objects.filter(
                 family=self.family,
                 relationship_type=Relationship.Type.PARENT_CHILD,
@@ -84,15 +80,27 @@ class TreeEngine:
                 },
             })
 
-        # Parent-child edges between visited individuals
+        # 5. Parent-Child Edges: Deduplicate per child so there is only 1 clean orthogonal lineage line
         parent_relationships = Relationship.objects.filter(
             family=self.family,
             relationship_type=Relationship.Type.PARENT_CHILD,
             person_a_id__in=visited_ids,
             person_b_id__in=visited_ids,
+        ).select_related("person_a", "person_b")
+
+        # Sort so male/father parent comes first to avoid criss-crossing double lines
+        sorted_parent_rels = sorted(
+            parent_relationships,
+            key=lambda r: 0 if r.person_a.gender == Person.Gender.MALE else 1
         )
 
-        for rel in parent_relationships:
+        child_line_seen = set()
+        for rel in sorted_parent_rels:
+            child_id = str(rel.person_b_id)
+            if child_id in child_line_seen:
+                continue
+            child_line_seen.add(child_id)
+
             edge_id = f"edge-pc-{rel.person_a_id}-{rel.person_b_id}"
             if edge_id not in edge_ids_seen:
                 edge_ids_seen.add(edge_id)
@@ -102,13 +110,14 @@ class TreeEngine:
                     "target": f"person-{rel.person_b_id}",
                     "type": "smoothstep",
                     "animated": False,
+                    "style": {"stroke": "#475569", "strokeWidth": 2.5},
                     "data": {
                         "relationshipType": "PARENT_CHILD",
                         "subtype": rel.relationship_subtype,
                     },
                 })
 
-        # Spouse edges between visited individuals
+        # 6. Spouse Edges between married couples with wedding ring styling
         for p1_id, p2_id, partnership_type, end_reason in spouse_pairs:
             edge_id = f"edge-sp-{min(p1_id, p2_id)}-{max(p1_id, p2_id)}"
             if edge_id not in edge_ids_seen:
@@ -117,9 +126,16 @@ class TreeEngine:
                     "id": edge_id,
                     "source": f"person-{p1_id}",
                     "target": f"person-{p2_id}",
+                    "sourceHandle": "spouse-right",
+                    "targetHandle": "spouse-left",
                     "type": "straight",
                     "animated": False,
-                    "style": {"strokeDasharray": "5,5", "stroke": "#ec4899", "strokeWidth": 2},
+                    "label": "⚭",
+                    "labelStyle": {"fill": "#d97706", "fontWeight": 700, "fontSize": 18},
+                    "labelBgPadding": [4, 4],
+                    "labelBgBorderRadius": 6,
+                    "labelBgStyle": {"fill": "#fffbeb", "stroke": "#fbbf24", "strokeWidth": 1},
+                    "style": {"stroke": "#d97706", "strokeWidth": 2},
                     "data": {
                         "relationshipType": "SPOUSE",
                         "partnershipType": partnership_type,
