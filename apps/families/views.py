@@ -24,7 +24,9 @@ class FamilyViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Family.objects.filter(privacy=Family.Privacy.PUBLIC).annotate(
-                members_count=Count("members", distinct=True)
+                members_count=Count("members", distinct=True),
+                photos_count=Count("media", filter=Q(media__media_type="PHOTO"), distinct=True),
+                stories_count=Count("stories", filter=Q(stories__status="PUBLISHED"), distinct=True),
             )
 
         return (
@@ -32,7 +34,11 @@ class FamilyViewSet(viewsets.ModelViewSet):
                 Q(memberships__user=user) | Q(privacy=Family.Privacy.PUBLIC)
             )
             .distinct()
-            .annotate(members_count=Count("members", distinct=True))
+            .annotate(
+                members_count=Count("members", distinct=True),
+                photos_count=Count("media", filter=Q(media__media_type="PHOTO"), distinct=True),
+                stories_count=Count("stories", filter=Q(stories__status="PUBLISHED"), distinct=True),
+            )
         )
 
     def get_permissions(self):

@@ -18,6 +18,8 @@ class FamilyMembershipSerializer(serializers.ModelSerializer):
 class FamilySerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
     members_count = serializers.IntegerField(read_only=True, default=0)
+    photos_count = serializers.IntegerField(read_only=True, default=0)
+    stories_count = serializers.IntegerField(read_only=True, default=0)
     current_user_role = serializers.SerializerMethodField()
 
     class Meta:
@@ -30,11 +32,26 @@ class FamilySerializer(serializers.ModelSerializer):
             "owner",
             "privacy",
             "members_count",
+            "photos_count",
+            "stories_count",
             "current_user_role",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("id", "owner", "created_at", "updated_at")
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        if instance.cover_image:
+            try:
+                if request:
+                    ret["cover_image"] = request.build_absolute_uri(instance.cover_image.url)
+                elif not instance.cover_image.url.startswith("http"):
+                    ret["cover_image"] = f"http://localhost:8000{instance.cover_image.url}"
+            except Exception:
+                pass
+        return ret
 
     def get_current_user_role(self, obj):
         request = self.context.get("request")
