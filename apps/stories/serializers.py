@@ -28,6 +28,19 @@ class StorySerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "author", "created_at", "updated_at")
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        if instance.cover_image:
+            try:
+                if request:
+                    ret["cover_image"] = request.build_absolute_uri(instance.cover_image.url)
+                elif not instance.cover_image.url.startswith("http"):
+                    ret["cover_image"] = f"http://localhost:8000{instance.cover_image.url}"
+            except Exception:
+                pass
+        return ret
+
     def create(self, validated_data):
         people = validated_data.pop("associated_people", [])
         request = self.context.get("request")
